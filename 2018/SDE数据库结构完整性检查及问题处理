@@ -1,0 +1,217 @@
+# SDE数据库结构完整性检查脚本及处理方法
+### 检查脚本
+``` SQL
+--创建type
+CREATE OR REPLACE TYPE tab_cols_type AS
+OBJECT(
+basetable VARCHAR2(200),
+altertable VARCHAR2(200),
+colname VARCHAR2(200),
+errdesc VARCHAR2(200)
+)
+--创建type
+CREATE OR REPLACE TYPE tab_cols AS TABLE OF tab_cols_type;
+--创建函数
+CREATE OR REPLACE FUNCTION generate_col_errs RETURN tab_cols PIPELINED
+AS
+CURSOR cur_tab IS SELECT * FROM sde.table_registry WHERE table_name NOT LIKE 'GDB_%';
+row_tab sde.table_registry%ROWTYPE;
+CURSOR cur_lyr IS SELECT * FROM sde.layers;
+row_lyr sde.layers%ROWTYPE;
+base_tab VARCHAR2(200);  --基表
+alter_tab VARCHAR2(200); --A表
+i_count NUMBER;
+BEGIN
+  --A表跟D表
+  OPEN cur_tab;
+  LOOP
+    FETCH cur_tab INTO row_tab;
+    EXIT WHEN cur_tab%NOTFOUND;
+    base_tab :=row_tab.table_name;
+    alter_tab := 'A'||row_tab.registration_id;
+    SELECT COUNT(1) INTO i_count FROM All_Tab_Columns WHERE table_name=alter_tab AND owner='SDE';
+    IF i_count >0 THEN
+    FOR item IN(SELECT column_name FROM all_tab_columns a WHERE NOT EXISTS(SELECT 1 FROM All_Tab_Columns b WHERE b.table_name=alter_tab AND a.owner=b.owner AND a.column_name=b.column_name) AND a.table_name=base_tab AND a.owner='SDE') LOOP
+      PIPE ROW(tab_cols_type(base_tab,alter_tab,item.column_name,'A表中不存在该字段'));
+    END LOOP;
+    FOR item IN(SELECT column_name FROM all_tab_columns a WHERE NOT EXISTS(SELECT 1 FROM All_Tab_Columns b WHERE b.table_name=base_tab AND a.owner=b.owner AND a.column_name=b.column_name) AND a.table_name=alter_tab AND a.owner='SDE') LOOP
+      IF item.column_name='SDE_STATE_ID' THEN CONTINUE; END IF;
+      PIPE ROW(tab_cols_type(base_tab,alter_tab,item.column_name,'基表中不存在该字段'));
+    END LOOP;
+    ELSE
+      PIPE ROW(tab_cols_type(base_tab,alter_tab,'','A表不存在'));
+    END IF;
+    alter_tab := 'D'||row_tab.registration_id;
+    SELECT COUNT(1) INTO i_count FROM All_Tab_Columns WHERE table_name=alter_tab AND owner='SDE';
+    IF i_count =0 THEN
+      PIPE ROW(tab_cols_type(base_tab,alter_tab,'','D表不存在'));
+    END IF;
+  END LOOP;
+  CLOSE cur_tab;
+  --S表跟F表
+  OPEN cur_lyr;
+  LOOP
+    FETCH cur_lyr INTO row_lyr;
+    EXIT WHEN cur_lyr%NOTFOUND;
+    base_tab :=row_lyr.table_name;
+    alter_tab := 'F'||row_lyr.layer_id;
+    SELECT COUNT(1) INTO i_count FROM All_Tab_Columns WHERE table_name=alter_tab AND owner='SDE';
+    IF i_count =0 THEN
+      PIPE ROW(tab_cols_type(base_tab,alter_tab,'','F表不存在'));
+    END IF;
+    alter_tab := 'S'||row_lyr.layer_id;
+    SELECT COUNT(1) INTO i_count FROM All_Tab_Columns WHERE table_name=alter_tab AND owner='SDE';
+    IF i_count =0 THEN
+      PIPE ROW(tab_cols_type(base_tab,alter_tab,'','S表不存在'));
+    END IF;
+  END LOOP;
+  CLOSE cur_lyr;
+  RETURN;
+END;
+--查询问题数据
+select generate_col_errs() from dual;
+```
+> 注意：该脚本需以SDE用户登录并执行
+
+### 问题处理方法
+- 字段不一致
+
+  查询结果如下：
+
+BASETABLE|ALTERTABLE|COLNAME|ERRDESC
+----|----|----|----
+T_ZD|A2378|ZD_SZ_REPARE|基表中不存在该字段
+T_LSZD|A2379|OLD_VALUE_PZ_YT|A表中不存在该字段
+
+  处理方法：
+  1. 提示“基表中不存在该字段”的，将COLNAME列指定的字段从ALTERTABLE列指定的表中删除；
+  2. 提示“A表中不存在该字段”的，将COLNAME列指定的字段从BASETABLE列指定的表中删除；
+
+- A表缺失
+
+  查询结果如下：
+
+BASETABLE|ALTERTABLE|COLNAME|ERRDESC
+----|----|----|----
+T_BINDSERIALLIST|A2855|	|A表不存在
+
+  处理方法：
+  1. 依据基本创建A表
+``` SQL
+create table a2855 as select * from t_bindseriallist where 1=2;
+```
+  2. 添加SDE_STATE_ID字段
+``` SQL
+alter table a2855 add sde_state_id(number) not null;
+```
+  3. 添加索引
+``` SQL
+create index A2855_STATEID_IX1 on A2855 (SDE_STATE_ID)
+  tablespace SDE
+  pctfree 10
+  initrans 4
+  maxtrans 255
+  storage
+  (
+    initial 320K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  )
+  nologging;
+```
+  4. 添加主键约束
+``` SQL
+alter table A2855
+  add constraint A2855_PK primary key (OBJECTID, SDE_STATE_ID)
+  using index
+  tablespace SDE
+  pctfree 10
+  initrans 4
+  maxtrans 255
+  storage
+  (
+    initial 576K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+alter index A2855_PK nologging;
+```
+
+- D表缺失
+
+  查询结果如下：
+
+BASETABLE|ALTERTABLE|COLNAME|ERRDESC
+----|----|----|----
+T_BINDSERIALLIST|D2855|	|D表不存在
+
+  处理方式：
+  1. 创建D表
+``` SQL
+create table D2855
+(
+  deleted_at         NUMBER(38) not null,
+  sde_deletes_row_id NUMBER(38) not null,
+  sde_state_id       NUMBER(38) not null
+)
+tablespace SDE
+  pctfree 10
+  initrans 4
+  maxtrans 255
+  storage
+  (
+    initial 128K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+```
+  2. 添加索引
+``` SQL
+create index D2855_IDX1 on D2855 (SDE_DELETES_ROW_ID, SDE_STATE_ID)
+  tablespace SDE
+  pctfree 10
+  initrans 4
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  )
+  nologging;
+```
+  3. 添加主键约束
+``` SQL
+alter table D2855
+  add constraint D2855_PK primary key (DELETED_AT, SDE_DELETES_ROW_ID, SDE_STATE_ID)
+  using index
+  tablespace SDE
+  pctfree 10
+  initrans 4
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+alter index D2855_PK nologging;
+```
+
+- F表缺失
+
+  若F表缺失，无有效解决办法，只能将图层删除后重新导入。
+
+- S表缺失
+
+  若S表缺失，可尝试重建空间索引方式解决；若无效，只能将图层删除后重新导入。
+
+### 注意事项
+1. 示例SQL中涉及到的表名称、索引名称、约束名称需根据实际情况进行修改；
+2. 补充缺失的表时，建议先停止SDE服务，待表补充完整后在启动SDE服务；
+3. 若相应基表不存在，则不需要补充对应的其他表（即A表等）；

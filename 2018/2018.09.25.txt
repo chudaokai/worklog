@@ -1,0 +1,44 @@
+### 诸城
+- [x] 权调需求：
+1. 宗地分割及合并，先保存到临时图层上；等客户来做业务的时候，再将修改保存到数据库中；
+  - 思路：
+    - 添加图层临时宗地（ST_TEMPZD），字段同T_ZD表，并添加字段OPTYPE（操作类型，记录操作是分割还是合并）；
+    - 添加配置项（分割、合并宗地到临时图层）；
+    - 添加实体类ST_TEMPZD（继承ST_ZD，并添加相应字段）；
+    - 分割、合并宗地时，仅对图形进行操作，并保存到临时宗地图层；
+    - 新增界面，可查询分割、合并宗地且保存到临时宗地图层的项目，当确认可保存到数据库时，支持保存到宗地图层中；
+2. 宗地设定走预受理系统（具体事宜需要与马少卿沟通）
+  - 基本流程：
+    - 客户在预受理系统录入宗地基本信息，并上传宗地矢量图形到系统中；
+    - 审核人员审核无误后拉取到登记库（暂定）中；
+    - 权籍人员使用权调软件读取拉取的数据，进行宗地设定，成功则返回宗地代码，失败则返回失败信息；
+  - 相关表结构：
+
+``` SQL
+CREATE TABLE zdxx(bsm NUMBER PRIMARY KEY,qllx VARCHAR2(10) NOT NULL,qlxz VARCHAR2(20) NOT NULL,tdyt VARCHAR2(20) NOT NULL,zdmj NUMBER NOT NULL,zddm varchar2(20),zl VARCHAR2(500) NOT NULL,syqr VARCHAR2(200),suoyqr VARCHAR2(200),syqqssj DATE,syqjssj DATE,szd VARCHAR2(200),szn VARCHAR2(200),szx VARCHAR2(200),szb VARCHAR2(200),state INTEGER not null default 0);
+
+create table zdt(bsm number primary key,zdbsm number not null,zdt blob,wjlx varchar2(10),state integer not null default 0);
+
+create or replace trigger trg_zdxx before insert or update on zdxx for each row
+begin
+  if :new.bsm>0 then null; else select seq_bsm.nextval into :new.bsm from dual; end if;
+end;
+
+create or replace trigger trg_zdt before insert or update on zdt for each row
+begin
+  if :new.bsm>0 then null; else select seq_bsm.nextval into :new.bsm from dual; end if;
+end;
+```
+  - 思路：
+    - 新增界面，可查询预受理推送的办件数据，选中可进行设定宗地操作；
+    - 读取推送的图形数据作为临时图形进行设定宗地操作；
+    - 在完善宗地信息界面，自动读取推送的宗地信息；
+    - 若成功设定宗地，则推送宗地代码到前置库中；若失败，则推送失败信息到前置库；（提交项目时进行推送）
+
+### 日照
+- [x] 日照：七星汽车MDB上传问题处理；
+- [x] 日照：上传实测数据的时候，如果已有预测数据，需要同步幢属性到登记库；
+
+### 权调软件
+- [x] 更新到最新代码；
+- [x] “维”房地挂接预转现功能，删除实测户的bdcdyzt数据（bdcdyh会重复）;
