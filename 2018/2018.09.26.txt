@@ -1,0 +1,24 @@
+### 诸城
+
+### 昌邑
+- [ ] 权调软件关联登记库宗地时，验证数据库是否已有该宗地存在问题，已修复；
+
+### 日照
+- [ ] MDB上传提示“**不动产单元号无法使用**”问题；
+- [ ] 向日照测绘单位提供日照市经纬度范围（随便一个点）；
+
+### 五莲
+- [ ] *T_LSZD*添加字段*QSLY*类型错误，已改正；
+
+### 高密
+- [ ] 导入预测户室提示“户室bdcdjbsm在户室表（xxx）中已有xx条”，原因：待导入户室在权调库表中已有，删除即可；
+
+### 权调软件
+1. 数据库连接失败的，可尝试注册Oracle.DataAccess.dll文件
+> 切换到Oracle客户端安装目录\product\11.1.0\client_1\ODP.NET\bin\2.x
+>
+> 打开CMD窗口，输入以下命令：
+>
+> OraProvCfg.exe /action:gac /providerpath:"Oracle客户端安装目录product\11.1.0\client_1\ODP.NET\bin\2.x\Oracle.DataAccess.dll"
+>
+> 回车执行。
