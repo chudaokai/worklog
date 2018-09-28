@@ -22,3 +22,4 @@
 > OraProvCfg.exe /action:gac /providerpath:"Oracle客户端安装目录product\11.1.0\client_1\ODP.NET\bin\2.x\Oracle.DataAccess.dll"
 >
 > 回车执行。
+>> 共有2个版本，可都进行注册。

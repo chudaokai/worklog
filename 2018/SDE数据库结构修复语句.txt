@@ -1,0 +1,122 @@
+--删除基本字段
+DECLARE s_sql VARCHAR2(2000);
+BEGIN
+  FOR item IN(SELECT * FROM table(sde.generate_col_errs()) WHERE errdesc='A表中不存在该字段') LOOP
+    s_sql :='alter table '||item.basetable||' drop column '||item.colname;
+    EXECUTE IMMEDIATE s_sql;
+  END LOOP;
+end;
+
+--删除A表字段
+DECLARE s_sql VARCHAR2(2000);
+BEGIN
+  FOR item IN(SELECT * FROM table(sde.generate_col_errs()) WHERE errdesc='基表中不存在该字段') LOOP
+    s_sql :='alter table '||item.altertable||' drop column '||item.colname;
+    EXECUTE IMMEDIATE s_sql;
+  END LOOP;
+END;
+
+--创建A表
+DECLARE s_sql VARCHAR2(2000);
+BEGIN
+  FOR item IN(SELECT * FROM table(sde.generate_col_errs()) WHERE errdesc='A表不存在') LOOP
+    --创建表
+    s_sql :='create table '||item.altertable||' select * from '||item.basetable||' where 1=2';
+    EXECUTE IMMEDIATE s_sql;
+    --添加字段
+    s_sql :='alter table '||item.altertable||' add sde_state_id number';
+    execute IMMEDIATE s_sql;
+    --添加索引
+    s_sql :='create index '||item.altertable||'_STATEID_IX1 on '||item.altertable||' (SDE_STATE_ID)
+      tablespace SDE
+      pctfree 10
+      initrans 4
+      maxtrans 255
+      storage
+      (
+        initial 320K
+        next 1M
+        minextents 1
+        maxextents unlimited
+      )
+      nologging';
+    EXECUTE IMMEDIATE s_sql;
+    --添加主键
+    s_sql :='alter table '||item.altertable||'
+      add constraint '||item.altertable||'_PK primary key (OBJECTID, SDE_STATE_ID)
+      using index
+      tablespace SDE
+      pctfree 10
+      initrans 4
+      maxtrans 255
+      storage
+      (
+        initial 576K
+        next 1M
+        minextents 1
+        maxextents unlimited
+      )';
+    execute IMMEDIATE s_sql;
+    s_sql :='alter index '||item.altertable||'_PK nologging';
+    execute IMMEDIATE s_sql;
+  END LOOP;
+END;
+
+--创建D表
+DECLARE s_sql VARCHAR2(2000);
+BEGIN
+  FOR item IN(SELECT * FROM table(sde.generate_col_errs()) WHERE errdesc='D表不存在') LOOP
+    --创建D表
+    s_sql :='create table '||item.altertable||'
+    (
+      deleted_at         NUMBER(38) not null,
+      sde_deletes_row_id NUMBER(38) not null,
+      sde_state_id       NUMBER(38) not null
+    )
+    tablespace SDE
+      pctfree 10
+      initrans 4
+      maxtrans 255
+      storage
+      (
+        initial 128K
+        next 1M
+        minextents 1
+        maxextents unlimited
+      )';
+    execute IMMEDIATE s_sql;
+    --添加索引
+    s_sql:='create index '||item.altertable||'_IDX1 on '||altertable||' (SDE_DELETES_ROW_ID, SDE_STATE_ID)
+      tablespace SDE
+      pctfree 10
+      initrans 4
+      maxtrans 255
+      storage
+      (
+        initial 64K
+        next 1M
+        minextents 1
+        maxextents unlimited
+      )
+      nologging';
+    EXECUTE IMMEDIATE s_sql;
+    --添加主键
+    s_sql :='alter table '||item.ALTERTABLE||'
+      add constraint '||item.altertable||'_PK primary key (DELETED_AT, SDE_DELETES_ROW_ID, SDE_STATE_ID)
+      using index
+      tablespace SDE
+      pctfree 10
+      initrans 4
+      maxtrans 255
+      storage
+      (
+        initial 64K
+        next 1M
+        minextents 1
+        maxextents unlimited
+      )';
+    execute IMMEDIATE s_sql;
+    s_sql :='alter index '||item.altertable||'_PK nologging';
+    execute IMMEDIATE s_sql;
+  end loop;
+end;
